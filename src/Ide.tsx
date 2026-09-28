@@ -848,8 +848,10 @@ function EvaluateDockPanel(_: IDockviewPanelProps) {
 // Panel: Docs (left group tab — doc comments for active file)
 // ---------------------------------------------------------------------------
 
-// docSourceType maps the active file path to the doc dialect.
-function docSourceType(path?: string): string {
+// sourceTypeOf maps a file path to its backend source type ("gad" |
+// "gadTemplate" | "gadx"): it picks the parser for docs, and the order imports
+// without an extension resolve in when running, debugging or inspecting.
+function sourceTypeOf(path?: string): string {
   if (path?.endsWith(".gadx")) return "gadx";
   if (path?.endsWith(".gadt")) return "gadTemplate";
   return "gad";
@@ -882,7 +884,7 @@ function DocsPanel(_: IDockviewPanelProps) {
         <DocPanel
           doc={ide.api.docGen}
           source={() => ide.activeTab?.content ?? ""}
-          sourceType={docSourceType(ide.activeTab?.path)}
+          sourceType={sourceTypeOf(ide.activeTab?.path)}
           docPath={ide.activeTab?.path ?? ""}
           dark={ide.dark}
           onNavigate={(line, col) => ide.editorRef.current?.gotoLocation(line, col)}
@@ -1445,7 +1447,12 @@ export function Ide({
         const res = await api.inspect(
           debug
             ? { expr, session: debug.session }
-            : { expr, source: editorRef.current?.getValue() ?? activeTab?.content ?? "", path: activeTab?.path },
+            : {
+                expr,
+                source: editorRef.current?.getValue() ?? activeTab?.content ?? "",
+                path: activeTab?.path,
+                sourceType: sourceTypeOf(activeTab?.path),
+              },
         );
         return res.ok && res.inspect ? res.inspect : null;
       } catch {
@@ -1648,7 +1655,7 @@ export function Ide({
     activateBottomPanel("output");
     try {
       const res = await api.run({
-        path: tab.path, source: content, args: cfg.args, disabled: cfg.disabled,
+        path: tab.path, sourceType: sourceTypeOf(tab.path), source: content, args: cfg.args, disabled: cfg.disabled,
         safe: cfg.safe, saveOut: cfg.saveOut || undefined,
         saveStdout: cfg.saveStdout || undefined, saveStderr: cfg.saveStderr || undefined,
         combine: cfg.combine || undefined,
@@ -1675,7 +1682,7 @@ export function Ide({
       const cfg = tab.runCfg;
       const res = await api.dbgStart({
         source: content, breakpoints: bpFor(tab.path),
-        breakpointSpecs: bpSpecsFor(tab.path), stopOnEntry, path: tab.path,
+        breakpointSpecs: bpSpecsFor(tab.path), stopOnEntry, path: tab.path, sourceType: sourceTypeOf(tab.path),
         args: cfg.args, disabled: cfg.disabled, safe: cfg.safe,
       });
       applyDebug(res, tab.path);
@@ -1727,7 +1734,9 @@ export function Ide({
     setStatus("running…");
     activateBottomPanel("output");
     try {
-      const res = await api.run({ path: p.path, source, args: p.args, tagEncode: p.tagEncode || undefined });
+      const res = await api.run({
+        path: p.path, sourceType: sourceTypeOf(p.path), source, args: p.args, tagEncode: p.tagEncode || undefined,
+      });
       clearOut();
       pushOut("out", res.stdout || "");
       pushOut("err", res.stderr || "");
@@ -1747,7 +1756,7 @@ export function Ide({
     try {
       const res = await api.dbgStart({
         source, breakpoints: bpFor(p.path), breakpointSpecs: bpSpecsFor(p.path),
-        stopOnEntry: false, path: p.path, args: p.args,
+        stopOnEntry: false, path: p.path, sourceType: sourceTypeOf(p.path), args: p.args,
       });
       applyDebug(res, p.path);
     } catch (e) {
